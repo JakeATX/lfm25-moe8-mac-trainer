@@ -5,6 +5,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -72,7 +73,7 @@ def main() -> None:
         raise SystemExit("Refusing GGUF export: tokenizer_config.json does not preserve tool_parser_type='pythonic'.")
 
     convert_cmd = [
-        "python3",
+        sys.executable,
         str(converter),
         str(args.hf_model),
         "--outfile",
@@ -84,6 +85,7 @@ def main() -> None:
 
     imatrix_out = out_dir / "calibration" / "hermes_tool_router_imatrix.gguf"
     if args.calibration:
+        imatrix_out.parent.mkdir(parents=True, exist_ok=True)
         run(
             [
                 str(imatrix),
