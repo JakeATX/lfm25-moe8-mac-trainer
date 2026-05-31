@@ -23,6 +23,9 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--max-seq-length", type=int, default=4096)
     parser.add_argument("--learning-rate", type=float, default=5e-6)
+    parser.add_argument("--lora-rank", type=int, default=8)
+    parser.add_argument("--lora-scale", type=float, default=20.0)
+    parser.add_argument("--lora-dropout", type=float, default=0.0)
     parser.add_argument("--val-batches", type=int, default=2)
     parser.add_argument("--save-every", type=int, default=100)
     parser.add_argument("--steps-per-report", type=int, default=10)
@@ -35,10 +38,27 @@ def main() -> None:
         args.out_config.parent.mkdir(parents=True, exist_ok=True)
         args.out_config.write_text(json.dumps(config, indent=2, default=str), encoding="utf-8")
 
+    lora_config_path = Path(args.adapter_path) / "mlx_lora_config.yaml"
+    lora_config_path.parent.mkdir(parents=True, exist_ok=True)
+    lora_config_path.write_text(
+        "\n".join(
+            [
+                "lora_parameters:",
+                f"  rank: {args.lora_rank}",
+                f"  scale: {args.lora_scale}",
+                f"  dropout: {args.lora_dropout}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
     cmd = [
         sys.executable,
         "-m",
         "mlx_lm.lora",
+        "--config",
+        str(lora_config_path),
         "--model",
         args.model,
         "--train",
