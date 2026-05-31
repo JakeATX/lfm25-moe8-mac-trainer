@@ -57,6 +57,43 @@ python scripts/run_lora_repair.py \
   --max-seq-length 4096
 ```
 
+Run the colloquial tool-router repair loop:
+
+```bash
+python scripts/build_colloquial_tool_router_dataset.py \
+  --out artifacts/repair_datasets/iter02_colloquial_router
+
+python scripts/eval_colloquial_tool_router.py \
+  --endpoint http://127.0.0.1:8081/v1/chat/completions \
+  --model release_work/model_upload \
+  --out artifacts/evals/iter02_pretrain_colloquial_openai_parser_disabled.json \
+  --allow-fail
+
+python scripts/run_lora_repair.py \
+  --model release_work/model_upload \
+  --data artifacts/repair_datasets/iter02_colloquial_router \
+  --adapter-path artifacts/adapters/lfm_tool_router_iter02 \
+  --iters 800 \
+  --max-seq-length 4096 \
+  --learning-rate 3e-6
+```
+
+For prompt-masked repair, convert the text dataset to MLX chat JSONL first:
+
+```bash
+PYTHONPATH=scripts python scripts/convert_text_dataset_to_chat_tools.py \
+  --src artifacts/repair_datasets/iter03_colloquial_router_server_template \
+  --out artifacts/repair_datasets/iter04_colloquial_router_chat_masked
+
+python scripts/run_lora_repair.py \
+  --model release_work/model_upload \
+  --data artifacts/repair_datasets/iter04_colloquial_router_chat_masked \
+  --adapter-path artifacts/adapters/lfm_tool_router_iter04_masked \
+  --resume-adapter-file artifacts/adapters/lfm_tool_router_iter03/adapters.safetensors \
+  --iters 600 \
+  --mask-prompt
+```
+
 ## Current Known Result
 
 The first completed local run is an expert/router direct-weight fine-tune:
@@ -82,6 +119,23 @@ The repair target format is:
 ```text
 <|tool_call_start|>[tool_name(arg="value")]<|tool_call_end|>
 ```
+
+## Colloquial Tool-Router Repair Result
+
+A second repair loop attempted to teach more aggressive natural-language routing for Hermes-style tools. The loop built three local datasets/adapters:
+
+- `iter02_colloquial_router`: 2,608 train / 212 valid / 213 test rows, text JSONL, native LFM pythonic targets.
+- `iter03_colloquial_router_server_template`: same scale, but with server-shaped tool JSON in the prompt.
+- `iter04_colloquial_router_chat_masked`: chat JSONL converted for MLX prompt masking so loss targets assistant completions only.
+
+The loop did not meet acceptance thresholds. All variants preserved the smaller 12-case structured OpenAI tool-call suite at `12/12`, but the broader colloquial eval stayed at `16/20` with the same failures:
+
+- `run echo hermes-tool-test` routed to `browser_navigate`.
+- `pwd in terminal` routed to `browser_navigate`.
+- `list files here from shell` routed to a non-Hermes `bash` tool.
+- `search this repo for browser_navigate` routed to `browser_navigate`.
+
+This means the adapters improved or preserved structured parser behavior but did not reliably change colloquial terminal/search tool selection. The iter02-iter04 adapters should be treated as analysis artifacts, not final model-release adapters.
 
 ## Safety Boundary
 

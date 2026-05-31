@@ -13,9 +13,11 @@ def main() -> None:
     parser.add_argument("--model", required=True)
     parser.add_argument("--data", required=True)
     parser.add_argument("--adapter-path", required=True)
+    parser.add_argument("--resume-adapter-file")
     parser.add_argument("--out-config", type=Path)
     parser.add_argument("--log", type=Path)
     parser.add_argument("--fine-tune-type", choices=["lora", "dora"], default="lora")
+    parser.add_argument("--mask-prompt", action="store_true")
     parser.add_argument("--iters", type=int, default=300)
     parser.add_argument("--num-layers", type=int, default=-1)
     parser.add_argument("--batch-size", type=int, default=1)
@@ -23,6 +25,8 @@ def main() -> None:
     parser.add_argument("--learning-rate", type=float, default=5e-6)
     parser.add_argument("--val-batches", type=int, default=2)
     parser.add_argument("--save-every", type=int, default=100)
+    parser.add_argument("--steps-per-report", type=int, default=10)
+    parser.add_argument("--steps-per-eval", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -57,9 +61,9 @@ def main() -> None:
         "--learning-rate",
         str(args.learning_rate),
         "--steps-per-report",
-        "10",
+        str(args.steps_per_report),
         "--steps-per-eval",
-        "50",
+        str(args.steps_per_eval),
         "--grad-accumulation-steps",
         "1",
         "--save-every",
@@ -68,6 +72,10 @@ def main() -> None:
         "--seed",
         str(args.seed),
     ]
+    if args.mask_prompt:
+        cmd.append("--mask-prompt")
+    if args.resume_adapter_file:
+        cmd.extend(["--resume-adapter-file", args.resume_adapter_file])
     if args.log:
         args.log.parent.mkdir(parents=True, exist_ok=True)
         with args.log.open("w", encoding="utf-8") as f:
