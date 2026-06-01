@@ -46,8 +46,8 @@ def make_overlapping_groups(layers: list[int], group_size: int, stride: int, ord
     return groups
 
 
-def load_train(data_dir: Path, tokenizer):
-    cfg = SimpleNamespace(mask_prompt=False)
+def load_train(data_dir: Path, tokenizer, mask_prompt: bool):
+    cfg = SimpleNamespace(mask_prompt=mask_prompt)
     train, valid, test = load_local_dataset(data_dir, tokenizer, cfg)
     return CacheDataset(train), CacheDataset(valid), CacheDataset(test)
 
@@ -101,6 +101,7 @@ def main():
     parser.add_argument("--limit-steps", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--mask-prompt", action="store_true")
     args = parser.parse_args()
 
     args.run_dir.mkdir(parents=True, exist_ok=True)
@@ -144,7 +145,7 @@ def main():
 
     selected_layers = parse_layers(model, args.layers)
     groups = make_overlapping_groups(selected_layers, args.group_size, args.stride, args.order)
-    train, valid, test = load_train(args.data, tokenizer)
+    train, valid, test = load_train(args.data, tokenizer, args.mask_prompt)
     batches_per_epoch = len(train)
     total_steps = args.epochs * batches_per_epoch
     if args.limit_steps:

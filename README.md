@@ -199,6 +199,23 @@ and an `11.54%` no-tool false-positive rate. Epoch04 is therefore a no-go for
 fusion, quantization, upload, or public release. See
 `docs/epoch04_tool_aggressive_go_no_go.md`.
 
+## Epoch05 Masked Pilot Result
+
+Epoch05 fixed the semi-full trainer objective by adding prompt masking and
+building a `messages` + `tools` dataset instead of pre-rendered text. The new
+dataset, `semi_epoch05_tool_repair_masked_10k`, has 720 train rows and no XML
+tool-call targets.
+
+Three 25-step pilots were run from the restored `step_01746_pythonic` base:
+
+- LR `1e-7`: 28/50 mini-suite, 11/30 structured tool calls, normal chat 17/20.
+- LR `3e-7`: same score as `1e-7`.
+- LR `1e-6`: 27/50 mini-suite, 12/30 structured tool calls, normal chat 15/20.
+
+No pilot passed the ladder gate. The full Epoch05 run was not launched, and no
+fusion, quantization, upload, or served-model replacement was performed. See
+`docs/epoch05_masked_pilot_go_no_go.md`.
+
 ## Fixed-Hermes Iter10 Release Result
 
 The accepted release adapter is `iter10_balanced_holdout_repair_r32`, trained after correcting the target data to use structured `assistant.tool_calls` rows so MLX renders canonical LFM pythonic calls during prompt-masked training.

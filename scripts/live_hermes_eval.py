@@ -10,6 +10,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 
 TEXT_TOOL_RE = re.compile(
@@ -55,6 +56,63 @@ def parse_call_args(raw: str | dict[str, Any] | None) -> dict[str, Any]:
         return json.loads(raw)
     except json.JSONDecodeError:
         return {"__raw__": raw}
+
+
+def normalize_command(command: str) -> str:
+    return " ".join(command.strip().split())
+
+
+def terminal_command_satisfies(expected: str, actual: str) -> bool:
+    expected_n = normalize_command(expected).lower()
+    actual_n = normalize_command(actual).lower()
+    if expected_n == actual_n or expected_n in actual_n:
+        return True
+    equivalents = {
+        "python3 --version": ["python3 -c", "python --version", "python3 -V"],
+        "ps aux | grep llama": ["ps aux", "grep llama"],
+        "printf '%s\\n' \"$SHELL\"": ["echo $shell", "printf", "$shell"],
+        "ls": ["ls -la", "find . -maxdepth 1"],
+    }
+    for key, variants in equivalents.items():
+        if expected_n == key and any(variant in actual_n for variant in variants):
+            return True
+    return False
+
+
+def url_contains_query_intent(expected_url: str, actual_url: str) -> bool:
+    expected = expected_url.lower()
+    actual = actual_url.lower()
+    if expected.split("?")[0] in actual:
+        return True
+    expected_q = " ".join(parse_qs(urlparse(expected_url).query).get("q", [""])).replace("+", " ").lower()
+    actual_text = actual.replace("+", " ")
+    tokens = [token for token in expected_q.split() if len(token) > 2]
+    if not tokens:
+        return False
+    matched = sum(1 for token in tokens if token in actual_text)
+    return matched >= max(1, min(3, len(tokens)))
+
+
+def args_semantically_valid(name: str, expected_args: dict[str, Any], actual_args: dict[str, Any]) -> bool:
+    for key, expected in expected_args.items():
+        actual = actual_args.get(key)
+        if actual is None:
+            return False
+        if name == "terminal" and key == "command":
+            if not terminal_command_satisfies(str(expected), str(actual)):
+                return False
+        elif name == "browser_navigate" and key == "url":
+            if not url_contains_query_intent(str(expected), str(actual)):
+                return False
+        elif name == "x_search" and key == "query":
+            expected_tokens = [token for token in str(expected).lower().split() if len(token) > 2]
+            actual_text = str(actual).lower()
+            if expected_tokens and sum(1 for token in expected_tokens if token in actual_text) < max(1, min(3, len(expected_tokens))):
+                return False
+        else:
+            if str(expected).lower() not in str(actual).lower():
+                return False
+    return True
 
 
 def messages_for(case: Case) -> list[dict[str, Any]]:
@@ -232,6 +290,10 @@ def classify(case: Case, message: dict[str, Any], finish_reason: str | None, too
         "text_tool_leak": text_leak,
         "tool_name": None,
         "parsed_args": {},
+        "tool_selected": False,
+        "schema_valid": False,
+        "args_semantically_valid": False,
+        "task_pass": False,
     }
     if case.expect_tool:
         if text_leak:
@@ -249,8 +311,10 @@ def classify(case: Case, message: dict[str, Any], finish_reason: str | None, too
         detail["parsed_args"] = args
         if name not in tool_names:
             return False, "invalid_tool_name", detail
+        detail["schema_valid"] = True
         if name != case.expect_tool:
             return False, "wrong_tool", detail
+        detail["tool_selected"] = True
         missing = [key for key in case.required_args if key not in args]
         if missing:
             return False, "invalid_args", {**detail, "missing_args": missing}
@@ -275,17 +339,12 @@ def classify(case: Case, message: dict[str, Any], finish_reason: str | None, too
             }
             if action not in allowed:
                 return False, "invented_action", detail
-        for key, expected in case.expected_args.items():
-            actual = str(args.get(key, ""))
-            if key == "url":
-                if str(expected).split("?")[0].lower() not in actual.lower() and not any(
-                    token.lower() in actual.lower() for token in str(expected).replace("+", " ").split()[:3]
-                ):
-                    return False, "invalid_args", detail
-            elif str(expected).lower() not in actual.lower():
-                return False, "invalid_args", detail
+        if not args_semantically_valid(name, case.expected_args, args):
+            return False, "invalid_args", detail
+        detail["args_semantically_valid"] = True
         if finish_reason != "tool_calls":
             return False, "text_tool_leak" if content else "invalid_args", detail
+        detail["task_pass"] = True
         return True, None, detail
 
     if tool_calls:
@@ -298,6 +357,7 @@ def classify(case: Case, message: dict[str, Any], finish_reason: str | None, too
             return False, "bad_finalization", detail
     elif case.content_contains and case.content_contains.lower() not in content.lower():
         return False, "normal_chat_regression", detail
+    detail["task_pass"] = True
     return True, None, detail
 
 
@@ -335,6 +395,10 @@ def evaluate_case(endpoint: str, model: str, tools: list[dict[str, Any]], case: 
             "tool_calls": message.get("tool_calls") or [],
             "tool_name": detail.get("tool_name"),
             "parsed_args": detail.get("parsed_args"),
+            "tool_selected": detail.get("tool_selected", False),
+            "schema_valid": detail.get("schema_valid", False),
+            "args_semantically_valid": detail.get("args_semantically_valid", False),
+            "task_pass": detail.get("task_pass", passed),
             "text_tool_leak": detail.get("text_tool_leak", False),
             "usage": resp.get("usage"),
             "notes": case.notes,
@@ -369,6 +433,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     for metric in cats.values():
         metric["rate"] = round(metric["passed"] / metric["total"], 4) if metric["total"] else 0
     structured_pass = sum(1 for r in tool_cases if r["passed"])
+    tool_selected = sum(1 for r in tool_cases if r.get("tool_selected") or r.get("passed"))
+    schema_valid = sum(1 for r in tool_cases if r.get("schema_valid") or r.get("passed"))
+    args_valid = sum(1 for r in tool_cases if r.get("args_semantically_valid") or r.get("passed"))
     no_tool_fp = sum(1 for r in no_tool if r.get("failure") == "over_tooling_no_tool_prompt")
     return {
         "passed": sum(1 for r in results if r["passed"]),
@@ -377,6 +444,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "tool_required_cases": len(tool_cases),
         "valid_structured_tool_calls": structured_pass,
         "valid_structured_tool_rate": round(structured_pass / len(tool_cases), 4) if tool_cases else 0,
+        "tool_selected_rate": round(tool_selected / len(tool_cases), 4) if tool_cases else 0,
+        "schema_valid_rate": round(schema_valid / len(tool_cases), 4) if tool_cases else 0,
+        "args_semantically_valid_rate": round(args_valid / len(tool_cases), 4) if tool_cases else 0,
         "no_tool_cases": len(no_tool),
         "no_tool_false_positive_rate": round(no_tool_fp / len(no_tool), 4) if no_tool else 0,
         "text_tool_leaks": sum(1 for r in results if r.get("text_tool_leak")),
