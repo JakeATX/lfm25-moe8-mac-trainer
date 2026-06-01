@@ -231,6 +231,32 @@ The loop did not meet acceptance thresholds. All variants preserved the smaller 
 
 This means the adapters improved or preserved structured parser behavior but did not reliably change colloquial terminal/search tool selection. The iter02-iter04 adapters should be treated as analysis artifacts, not final model-release adapters.
 
+## Live-Hermes Robustness Update
+
+The later live-Hermes verification loop found that the earlier offline and direct-API evals were not strong enough release gates. The `iter13` tuned/fused model and its KXL GGUFs should be treated as rejected artifacts because normal chat showed premature stopping and anchoring regressions in real use.
+
+The current rollback target is the preserved `step_01746_final` checkpoint packaged as:
+
+```text
+release_work/model_runtime_step01746_pythonic
+```
+
+That runtime copy only fixes tokenizer metadata by preserving `tool_parser_type: "pythonic"` so MLX can convert native LFM pythonic syntax into structured OpenAI `message.tool_calls`. It is not a new weight fine-tune.
+
+The live-Hermes Iter03 LoRA attempt trained cleanly but did not meet the release bar:
+
+| Metric | Fixed Base | Iter03 Adapter |
+|---|---:|---:|
+| Overall pass rate | 37 / 83 = 44.58% | 38 / 83 = 45.78% |
+| Structured tool-call rate | 20 / 57 = 35.09% | 22 / 57 = 38.60% |
+| No-tool false-positive rate | 14.29% | 19.05% |
+| Normal chat | 16 / 20 = 80.00% | 13 / 20 = 65.00% |
+| Browser/current | 4 / 21 = 19.05% | 6 / 21 = 28.57% |
+| Terminal/file/patch | 12 / 17 = 70.59% | 9 / 17 = 52.94% |
+| Computer-use/browser-control | 1 / 10 = 10.00% | 3 / 10 = 30.00% |
+
+The Iter03 adapter is therefore retained only as an experiment artifact. Fusion, upload, and KXL quant export are deferred until live-Hermes and normal-chat gates pass. See `docs/live_hermes_iter03_go_no_go.md` for the current go/no-go record.
+
 ## Safety Boundary
 
 This repo does not contain API keys or Hugging Face tokens. Do not commit local `config.yaml`, `.env`, generated checkpoints, or raw private logs.
