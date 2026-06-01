@@ -179,6 +179,26 @@ The repair target format is:
 <|tool_call_start|>[tool_name(arg="value")]<|tool_call_end|>
 ```
 
+## Epoch04 Aggressive Tool-Use Experiment
+
+Epoch04 attempted one more grouped direct expert/router epoch from the restored
+`step_01746_pythonic` base with a 10K-capped dataset focused on aggressive
+Hermes tool use, current-info/browser routing, correction/recovery, and normal
+chat retention.
+
+The run completed cleanly:
+
+- 582/582 steps.
+- Peak memory: 39.934 GB.
+- Final checkpoint: `step_00582_final`.
+- No NaN, OOM, hard-memory, or killed-process markers were found.
+
+However, parser-disabled evaluation on the 200-case suite did not improve over
+the fixed base: both scored `95/200` overall, `54/144` structured tool calls,
+and an `11.54%` no-tool false-positive rate. Epoch04 is therefore a no-go for
+fusion, quantization, upload, or public release. See
+`docs/epoch04_tool_aggressive_go_no_go.md`.
+
 ## Fixed-Hermes Iter10 Release Result
 
 The accepted release adapter is `iter10_balanced_holdout_repair_r32`, trained after correcting the target data to use structured `assistant.tool_calls` rows so MLX renders canonical LFM pythonic calls during prompt-masked training.
