@@ -236,6 +236,37 @@ invented tool names/actions, but neither solved general web/current routing.
 No full Epoch06 run, fusion, quantization, upload, or served-model replacement
 was performed. See `docs/epoch06_expanded_masked_pilot_go_no_go.md`.
 
+## Iter14 Focused Contrast Router Result
+
+Iter14 narrowed the repair problem to one concrete boundary: general
+web/current/weather prompts should route to `browser_navigate`, while explicit
+X/Twitter prompts route to `x_search` and local repo/file prompts route to
+`search_files`.
+
+It added:
+
+- `scripts/build_iter14_browser_x_files_contrast_dataset.py`
+- `scripts/eval_iter14_contrast_router.py`
+- `scripts/diagnose_iter14_contrast_margins.py`
+- `scripts/run_iter14_adapter_search.py`
+
+The dataset built successfully as `1200/120/120` prompt-masked
+`messages`+`tools` rows with no XML targets. The fixed base scored `50/80` on
+the focused suite, with browser/general web only `4/20` while X search reached
+`17/20` and local file search reached `13/15`.
+
+Two small LoRA attempts were rejected:
+
+- Rank 8, LR `1e-6`: moved candidate margins and broad browser/current from
+  `2/21` to `8/21`, but introduced invented tools, over-tooling, normal-chat
+  regression, and terminal/file regression.
+- Rank 4, LR `3e-7`: avoided invented tools but did not improve the browser
+  boundary and still regressed normal chat by one case.
+
+No fusion, quantization, upload, or served-model replacement was performed.
+The kept diagnostic adapter is `artifacts/adapters/iter14_browser_x_files_contrast_r8`.
+See `docs/iter14_focused_contrast_router_go_no_go.md`.
+
 ## Fixed-Hermes Iter10 Release Result
 
 The accepted release adapter is `iter10_balanced_holdout_repair_r32`, trained after correcting the target data to use structured `assistant.tool_calls` rows so MLX renders canonical LFM pythonic calls during prompt-masked training.
