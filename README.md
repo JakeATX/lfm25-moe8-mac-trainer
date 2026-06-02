@@ -216,6 +216,26 @@ No pilot passed the ladder gate. The full Epoch05 run was not launched, and no
 fusion, quantization, upload, or served-model replacement was performed. See
 `docs/epoch05_masked_pilot_go_no_go.md`.
 
+## Epoch06 Expanded Masked Pilot Result
+
+Epoch06 expanded the prompt-masked semi-full dataset to 2,400 train rows with a
+heavier browser/current-info mix, live failure repairs, normal-chat retention,
+and exact-schema `computer_use` rows. It also added candidate-loss diagnostics
+for correct tool calls versus refusal/prose alternatives.
+
+Two 100-step pilots were run:
+
+- Pilot A: warm-start from Epoch05 `1e-6`, all MoE layers, LR `5e-7`.
+- Pilot B: restart from fixed base, late MoE layers `14-23`, LR `1e-6`.
+
+Neither passed the gate. Pilot A was best overall at `28/50`, with normal chat
+`17/20`, but browser/current-info only reached `3/21`. Pilot B reached `27/50`
+and browser/current-info `3/21`. Both retained zero text-tool leaks and zero
+invented tool names/actions, but neither solved general web/current routing.
+
+No full Epoch06 run, fusion, quantization, upload, or served-model replacement
+was performed. See `docs/epoch06_expanded_masked_pilot_go_no_go.md`.
+
 ## Fixed-Hermes Iter10 Release Result
 
 The accepted release adapter is `iter10_balanced_holdout_repair_r32`, trained after correcting the target data to use structured `assistant.tool_calls` rows so MLX renders canonical LFM pythonic calls during prompt-masked training.
